@@ -115,6 +115,89 @@ class KnowledgeBase(object):
         else:
             print("Invalid ask:", fact.statement)
             return []
+    
+    def kb_remove(self, fact_or_rule):
+        """Helper function of kb_retract that removes a fact or rule from the KB
+
+        Args:
+            fact_or_rule - fact or rule to be removed
+
+        Returns:
+            None
+        """
+        printv("Removing {!r}", 0, verbose, [fact_or_rule])
+
+
+        # if fact_or_rule is a FACT and is in the knowledge base
+        if (isinstance(fact_or_rule, Fact)) and fact_or_rule in self.facts:
+
+            # if fact is asserted -> change asserted to false
+            if fact_or_rule.asserted == True:
+                fact_or_rule.asserted = False 
+            
+            # if fact is supported (and no longer asserted) -> keep it
+            
+            # if fact is not supported (and no longer asserted) -> remove it 
+            if len(fact_or_rule.supported_by) == 0:
+
+                # if fact supports other facts, adjust the supported_by lists of the supported facts and remove supported facts accordingly
+                if len(fact_or_rule.supports_facts) > 0:
+                    for currFact in fact_or_rule.supports_facts:
+                        currFact = self._get_fact(currFact)
+                        for currPair in currFact.supported_by:
+                            if currPair[0] == fact_or_rule: # if fact in pair is the fact we're removing
+                                currFact.supported_by.remove(currPair) # remove pair from the supported fact's supported_by list
+                        if (len(currFact.supported_by) == 0) and currFact.asserted == False: # if supported fact is no longer supported and it's not asserted
+                            self.kb_remove(currFact) # remove supported fact from knowledge base
+
+                # if fact supports other rules, adjust the supported_by lists of the supported rules and remove supported rules accordingly 
+                if len(fact_or_rule.supports_rules) > 0:
+                    for currRule in fact_or_rule.supports_rules:
+                        currRule = self._get_rule(currRule)
+                        for currPair in currRule.supported_by:
+                            if currPair[0] == fact_or_rule: # if fact in pair is the fact we're removing
+                                currRule.supported_by.remove(currPair) # remove pair from the supported rule's supported_by list
+                        if (len(currRule.supported_by) == 0) and currRule.asserted == False: # if supported rule is no longer supported and it's not asserted
+                            self.kb_remove(currRule) # remove supported rule from knowledge base
+
+                # remove fact from knowledge base
+                self.facts.remove(fact_or_rule)
+
+
+        # if fact_or_rule is a RULE and is in the knowledge base
+        if (isinstance(fact_or_rule, Rule)) and fact_or_rule in self.rules:
+
+            # if rule is just asserted or both asserted and supported -> keep it
+
+            # if rule is just supported -> keep it
+
+            # if rule is neither asserted nor supported -> remove it
+            if (fact_or_rule.asserted == False) and len(fact_or_rule.supported_by) == 0:
+
+                # if rule supports other facts, adjust the supported_by lists of the supported facts and remove supported facts accordingly
+                if len(fact_or_rule.supports_facts) > 0:
+                    for currFact in fact_or_rule.supports_facts:
+                        currFact = self._get_fact(currFact)
+                        for currPair in currFact.supported_by:
+                            if currPair[1] == fact_or_rule: # if rule in pair is the rule we're removing
+                                currFact.supported_by.remove(currPair) # remove pair from the supported fact's supported_by list
+                        if (len(currFact.supported_by) == 0) and currFact.asserted == False: # if supported fact is no longer supported and it's not asserted
+                            self.kb_remove(currFact)  # remove supported fact from knowledge base
+
+                # if rule supports other rules, adjust the supported_by lists of the supported rules and remove supported rules accordingly
+                if len(fact_or_rule.supports_facts) > 0:
+                    for currRule in fact_or_rule.supports_rules:
+                        currRule = self._get_rule(currRule)
+                        for currPair in currRule.supported_by:
+                            if currPair[1] == fact_or_rule: # if rule in pair is the rule we're removing
+                                currRule.supported_by.remove(currPair) # remove pair from the supported rule's supported_by list
+                        if (len(currRule.supported_by) == 0) and currRule.asserted == False: # if supported rule is no longer supported and it's not asserted
+                            self.kb_remove(currRule) # remove supported rule from knowledge base
+                
+                # remove rule from knowledge base
+                self.rules.remove(fact_or_rule)
+
+
 
     def kb_retract(self, fact_or_rule):
         """Retract a fact from the KB
@@ -126,9 +209,11 @@ class KnowledgeBase(object):
             None
         """
         printv("Retracting {!r}", 0, verbose, [fact_or_rule])
-        ####################################################
-        # Student code goes here
-        
+        if isinstance (fact_or_rule, Fact): #if fact
+            if fact_or_rule in self.facts: #if fact is in knowledge base
+                fact = self._get_fact(fact_or_rule) #get fact from knowledge base
+                self.kb_remove(fact) #remove fact from knowledge base
+
 
 class InferenceEngine(object):
     def fc_infer(self, fact, rule, kb):
@@ -144,5 +229,28 @@ class InferenceEngine(object):
         """
         printv('Attempting to infer from {!r} and {!r} => {!r}', 1, verbose,
             [fact.statement, rule.lhs, rule.rhs])
-        ####################################################
-        # Student code goes here
+
+        matchBindings = match(rule.lhs[0], fact.statement)
+
+        # if there is a match, infer a new fact or rule
+        if matchBindings:
+
+            # if length of left hand side is 1, infer a new fact
+            if len(rule.lhs) == 1:
+                newStatement = instantiate(rule.rhs, matchBindings)
+                newFact = Fact(newStatement, [[fact, rule]]) #makes a new fact while also adding a pair consisting of a fact and a rule to newFact's supported_by list
+                fact.supports_facts.append(newFact) #adds new fact to supports_facts list of original fact
+                rule.supports_facts.append(newFact) #adds new fact to supports_facts list of original rule
+                kb.kb_add(newFact) #adds new fact to knowledge base
+
+            #if length of left hand side is more than 1, infer a new rule
+            elif len(rule.lhs) > 1:
+                newLHS = [] #creates empty list for left hand side of new rule
+                for element in rule.lhs[1:]:
+                    newStatement = instantiate(element, matchBindings)
+                    newLHS.append(newStatement)
+                newRHS = instantiate(rule.rhs, matchBindings)
+                newRule = Rule([newLHS, newRHS], [[fact, rule]]) #makes a new rule while also adding a pair consisting of a fact and a rule to newRule's supported_by list
+                fact.supports_rules.append(newRule) #adds new rule to supports_rules list of original fact
+                rule.supports_rules.append(newRule) #adds new rule supports_rules list of original rule
+                kb.kb_add(newRule) #adds new rule to knowledge base
