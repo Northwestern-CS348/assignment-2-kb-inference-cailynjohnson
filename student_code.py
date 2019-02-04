@@ -185,7 +185,7 @@ class KnowledgeBase(object):
                             self.kb_remove(currFact)  # remove supported fact from knowledge base
 
                 # if rule supports other rules, adjust the supported_by lists of the supported rules and remove supported rules accordingly
-                if len(fact_or_rule.supports_facts) > 0:
+                if len(fact_or_rule.supports_rules) > 0:
                     for currRule in fact_or_rule.supports_rules:
                         currRule = self._get_rule(currRule)
                         for currPair in currRule.supported_by:
